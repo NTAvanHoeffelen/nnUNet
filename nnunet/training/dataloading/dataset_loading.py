@@ -592,6 +592,617 @@ class DataLoader2D(SlimDataLoaderBase):
         keys = selected_keys
         return {'data': data, 'seg': seg, 'properties': case_properties, "keys": keys}
 
+class DataLoader2D_pseudo_3d_fix(DataLoader2D):
+    def __init__(self, data, patch_size, final_patch_size, batch_size, oversample_foreground_percent=0, memmap_mode="r", pseudo_3d_slices=1, pad_mode="edge", pad_kwargs_data=None, pad_sides=None,  avg_slices = False):
+
+        self.average_slices = avg_slices
+
+        super().__init__(data, patch_size, final_patch_size, batch_size, oversample_foreground_percent, memmap_mode, pseudo_3d_slices, pad_mode, pad_kwargs_data, pad_sides)
+
+    def determine_shapes(self):
+        num_seg = 1
+
+        k = list(self._data.keys())[0]
+        if isfile(self._data[k]['data_file'][:-4] + ".npy"):
+            case_all_data = np.load(self._data[k]['data_file'][:-4] + ".npy", self.memmap_mode)
+        else:
+            case_all_data = np.load(self._data[k]['data_file'])['data']
+        num_color_channels = case_all_data.shape[0] - num_seg
+        # data_shape = (self.batch_size, num_color_channels, *self.patch_size)
+        if self.average_slices:
+            data_shape = (self.batch_size, 3, *self.patch_size) # WE FORCE THERE TO BE 3 CHANNELS, 1 FOR ABOVE, 1 FOR MIDDLE, 1 FOR BELOW
+        else:
+            data_shape = (self.batch_size, self.pseudo_3d_slices, *self.patch_size)  # WE ASSUME THE DATA HAS 1 COLOUR CHANNEL, AND THEREFORE INSTEAD USE THE COLOUR CHANNEL TO SIGNIFY SLICES
+
+        seg_shape = (self.batch_size, num_seg, *self.patch_size)
+        return data_shape, seg_shape
+
+
+    def generate_train_batch(self):
+        selected_keys = np.random.choice(self.list_of_keys, self.batch_size, True, None)
+
+        data = np.zeros(self.data_shape, dtype=np.float32)
+        seg = np.zeros(self.seg_shape, dtype=np.float32)
+
+        case_properties = []
+        
+        # Here j is the name of the file, i is a iterator int (0,1,2,3,..)
+        for j, i in enumerate(selected_keys):
+            if 'properties' in self._data[i].keys():
+                properties = self._data[i]['properties']
+            else:
+                properties = load_pickle(self._data[i]['properties_file'])
+            case_properties.append(properties)
+
+            if self.get_do_oversample(j):
+                force_fg = True
+            else:
+                force_fg = False
+
+            if not isfile(self._data[i]['data_file'][:-4] + ".npy"):
+                # lets hope you know what you're doing
+                case_all_data = np.load(self._data[i]['data_file'][:-4] + ".npz")['data']
+            else:
+                case_all_data = np.load(self._data[i]['data_file'][:-4] + ".npy", self.memmap_mode)
+
+            # this is for when there is just a 2d slice in case_all_data (2d support)
+            if len(case_all_data.shape) == 3:
+                # add another dimension to the np.array
+                case_all_data = case_all_data[:, None]
+
+            # first select a slice. This can be either random (no force fg) or guaranteed to contain some class
+            if not force_fg:
+                # pick one of the slices
+                random_slice = np.random.choice(case_all_data.shape[1])
+                selected_class = None
+            else:
+                # these values should have been precomputed
+                if 'class_locations' not in properties.keys():
+                    raise RuntimeError("Please rerun the preprocessing with the newest version of nnU-Net!")
+
+                foreground_classes = np.array(
+                    [i for i in properties['class_locations'].keys() if len(properties['class_locations'][i]) != 0])
+                foreground_classes = foreground_classes[foreground_classes > 0]
+                if len(foreground_classes) == 0:
+                    selected_class = None
+                    # if no slice with foreground select random slice
+                    random_slice = np.random.choice(case_all_data.shape[1])
+                    print('case does not contain any foreground classes', i)
+                else:
+                    selected_class = np.random.choice(foreground_classes)
+
+                    voxels_of_that_class = properties['class_locations'][selected_class]
+                    valid_slices = np.unique(voxels_of_that_class[:, 0])
+                    # select a random slice with foreground
+                    random_slice = np.random.choice(valid_slices)
+                    voxels_of_that_class = voxels_of_that_class[voxels_of_that_class[:, 0] == random_slice]
+                    voxels_of_that_class = voxels_of_that_class[:, 1:]
+
+            # now crop case_all_data to contain just the slice of interest. If we want additional slice above and
+            # below the current slice, here is where we get them. We stack those as additional color channels
+            if self.pseudo_3d_slices == 1:
+                case_all_data = case_all_data[:, random_slice]
+            else:
+                # this is very deprecated and will probably not work anymore. If you intend to use this you need to
+                # check this!
+
+                # determine slice range
+                mn = random_slice - (self.pseudo_3d_slices - 1) // 2
+                mx = random_slice + (self.pseudo_3d_slices - 1) // 2 + 1
+                valid_mn = max(mn, 0)
+                valid_mx = min(mx, case_all_data.shape[1])
+
+                # select data
+                case_all_seg = case_all_data[-1:]
+                case_all_data = case_all_data[:-1]
+
+                if self.average_slices:
+                    case_all_data_above = case_all_data[:, valid_mn:random_slice]
+                    case_all_data_middle = case_all_data[:, random_slice]
+                    case_all_data_below = case_all_data[:, random_slice:valid_mx]
+
+                    # average
+                    case_above_avg = np.mean(case_all_data_above, axis = 1)
+                    case_below_avg = np.mean(case_all_data_below, axis = 1)
+
+                    # merge
+                    case_all_data_zeros = np.zeros((1,3,case_all_data_middle.shape[1], case_all_data_middle.shape[2]))
+                    case_all_data_zeros[:,0] = case_above_avg
+                    case_all_data_zeros[:,1] = case_all_data_middle
+                    case_all_data_zeros[:,2] = case_below_avg
+                    case_all_data = case_all_data_zeros
+
+                else:
+                    # select multiple image slices accoring to the determined slice range
+                    case_all_data = case_all_data[:, valid_mn:valid_mx]
+
+                # select the middle segmentation slice
+                case_all_seg = case_all_seg[:, random_slice]
+
+                # determine pading
+                need_to_pad_below = valid_mn - mn
+                need_to_pad_above = mx - valid_mx
+                if not self.average_slices:
+                    if need_to_pad_below > 0:
+                        shp_for_pad = np.array(case_all_data.shape)
+                        shp_for_pad[1] = need_to_pad_below
+                        case_all_data = np.concatenate((np.zeros(shp_for_pad), case_all_data), 1)
+                    if need_to_pad_above > 0:
+                        shp_for_pad = np.array(case_all_data.shape)
+                        shp_for_pad[1] = need_to_pad_above
+                        case_all_data = np.concatenate((case_all_data, np.zeros(shp_for_pad)), 1)
+                case_all_data = case_all_data.reshape((-1, case_all_data.shape[-2], case_all_data.shape[-1]))
+                case_all_data = np.concatenate((case_all_data, case_all_seg), 0)
+
+            # case all data should now be (c, x, y)
+            assert len(case_all_data.shape) == 3
+
+            # we can now choose the bbox from -need_to_pad // 2 to shape - patch_size + need_to_pad // 2. Here we
+            # define what the upper and lower bound can be to then sample from them with np.random.randint
+
+            need_to_pad = self.need_to_pad.copy()
+            for d in range(2):
+                # if case_all_data.shape + need_to_pad is still < patch size we need to pad more! We pad on both sides
+                # always
+                if need_to_pad[d] + case_all_data.shape[d + 1] < self.patch_size[d]:
+                    need_to_pad[d] = self.patch_size[d] - case_all_data.shape[d + 1]
+
+            shape = case_all_data.shape[1:]
+            lb_x = - need_to_pad[0] // 2
+            ub_x = shape[0] + need_to_pad[0] // 2 + need_to_pad[0] % 2 - self.patch_size[0]
+            lb_y = - need_to_pad[1] // 2
+            ub_y = shape[1] + need_to_pad[1] // 2 + need_to_pad[1] % 2 - self.patch_size[1]
+
+            # if not force_fg then we can just sample the bbox randomly from lb and ub. Else we need to make sure we get
+            # at least one of the foreground classes in the patch
+            if not force_fg or selected_class is None:
+                bbox_x_lb = np.random.randint(lb_x, ub_x + 1)
+                bbox_y_lb = np.random.randint(lb_y, ub_y + 1)
+            else:
+                # this saves us a np.unique. Preprocessing already did that for all cases. Neat.
+                selected_voxel = voxels_of_that_class[np.random.choice(len(voxels_of_that_class))]
+                # selected voxel is center voxel. Subtract half the patch size to get lower bbox voxel.
+                # Make sure it is within the bounds of lb and ub
+                bbox_x_lb = max(lb_x, selected_voxel[0] - self.patch_size[0] // 2)
+                bbox_y_lb = max(lb_y, selected_voxel[1] - self.patch_size[1] // 2)
+
+            bbox_x_ub = bbox_x_lb + self.patch_size[0]
+            bbox_y_ub = bbox_y_lb + self.patch_size[1]
+
+            # whoever wrote this knew what he was doing (hint: it was me). We first crop the data to the region of the
+            # bbox that actually lies within the data. This will result in a smaller array which is then faster to pad.
+            # valid_bbox is just the coord that lied within the data cube. It will be padded to match the patch size
+            # later
+            valid_bbox_x_lb = max(0, bbox_x_lb)
+            valid_bbox_x_ub = min(shape[0], bbox_x_ub)
+            valid_bbox_y_lb = max(0, bbox_y_lb)
+            valid_bbox_y_ub = min(shape[1], bbox_y_ub)
+
+            # At this point you might ask yourself why we would treat seg differently from seg_from_previous_stage.
+            # Why not just concatenate them here and forget about the if statements? Well that's because segneeds to
+            # be padded with -1 constant whereas seg_from_previous_stage needs to be padded with 0s (we could also
+            # remove label -1 in the data augmentation but this way it is less error prone)
+
+            case_all_data = case_all_data[:, valid_bbox_x_lb:valid_bbox_x_ub,
+                            valid_bbox_y_lb:valid_bbox_y_ub]
+
+            case_all_data_donly = np.pad(case_all_data[:-1], ((0, 0),
+                                                              (-min(0, bbox_x_lb), max(bbox_x_ub - shape[0], 0)),
+                                                              (-min(0, bbox_y_lb), max(bbox_y_ub - shape[1], 0))),
+                                         self.pad_mode, **self.pad_kwargs_data)
+
+            case_all_data_segonly = np.pad(case_all_data[-1:], ((0, 0),
+                                                                (-min(0, bbox_x_lb), max(bbox_x_ub - shape[0], 0)),
+                                                                (-min(0, bbox_y_lb), max(bbox_y_ub - shape[1], 0))),
+                                           'constant', **{'constant_values': -1})
+
+            data[j] = case_all_data_donly
+            seg[j] = case_all_data_segonly
+
+        keys = selected_keys
+        return {'data': data, 'seg': seg, 'properties': case_properties, "keys": keys}
+
+class DataLoader2D_fewshot(DataLoader2D):
+    def __init__(self, data, patch_size, final_patch_size, batch_size, oversample_foreground_percent=0, memmap_mode="r", pseudo_3d_slices=1, pad_mode="edge", pad_kwargs_data=None, pad_sides=None, train = True, val_classes = None, nr_shots = 1):
+        super().__init__(data, patch_size, final_patch_size, batch_size, oversample_foreground_percent, memmap_mode, pseudo_3d_slices, pad_mode, pad_kwargs_data, pad_sides)
+        self.class_key_lists = {} # dict of lists; each list contains the keys for data that contains that class
+        self.classes = None
+        self.three_dim_data = self.determine_data_dim()
+        if self.three_dim_data:
+            self.create_class_data_lists3d()
+        else:
+            self.create_class_data_lists2d()
+        self.batch_size = batch_size             # in episodic training we only have 1 (not always)
+
+        self.train_classes = list(self.class_key_lists.keys())
+        self.val_classes = []
+
+        if val_classes is not None:
+            self.train_classes = val_classes
+
+        self.nr_shots = nr_shots
+    
+    def determine_shapes(self):
+        num_seg = 1
+
+        k = list(self._data.keys())[0]
+        if isfile(self._data[k]['data_file'][:-4] + ".npy"):
+            case_all_data = np.load(self._data[k]['data_file'][:-4] + ".npy", self.memmap_mode)
+        else:
+            case_all_data = np.load(self._data[k]['data_file'])['data']
+        num_color_channels = case_all_data.shape[0] - num_seg
+        data_shape = (self.batch_size, num_color_channels, *self.patch_size)
+        seg_shape = (self.batch_size, num_seg, *self.patch_size)
+        return data_shape, seg_shape
+
+    def determine_data_dim(self):
+        selected_keys = np.random.choice(self.list_of_keys, 1, True, None)
+
+        # Loop over 1 item
+        for j, i in enumerate(selected_keys):
+            if not isfile(self._data[i]['data_file'][:-4] + ".npy"):
+                # lets hope you know what you're doing
+                case_all_data = np.load(self._data[i]['data_file'][:-4] + ".npz")['data']
+            else:
+                case_all_data = np.load(self._data[i]['data_file'][:-4] + ".npy", self.memmap_mode)
+
+            # this is for when there is just a 2d slice in case_all_data (2d support)
+            if len(case_all_data.shape) == 3:
+                # add another dimension to the np.array
+                return False
+            else:
+                return True
+
+    # Pick classes in the dataset to be used for validation (feed this value to the second dataloader)
+    def get_val_class(self, amount_of_val_classes = 1, chosen_val_classes = None):
+        self.val_classes = np.random.choice(list(self.class_key_lists.keys()), amount_of_val_classes, False, None)
+
+        if chosen_val_classes is not None:
+            self.val_classes = chosen_val_classes
+        
+        self.train_classes = [i for i in self.train_classes if i not in self.val_classes]
+        return self.val_classes
+
+    def create_class_data_lists2d(self):
+        # NOTE: THIS IS FOR PRESLICED 2D DATA!!!
+        # # loop over all data
+        for j, i in enumerate(self.list_of_keys):
+            # per data point:
+            #   - load data
+            #   - check which classes are  present
+            #   - add key to list for that particular class
+            # load data properties
+            if 'properties' in self._data[i].keys():
+                properties = self._data[i]['properties']
+            else:
+                properties = load_pickle(self._data[i]['properties_file'])
+                
+            # find foreground classes
+            foreground_classes = np.array([i for i in properties['class_locations'].keys() if len(properties['class_locations'][i]) != 0])
+            foreground_classes = foreground_classes[foreground_classes > 0]
+            self.classes = foreground_classes
+            
+            # add index to class list
+            if len(foreground_classes) > 0:
+                for class_val in foreground_classes:
+                    if class_val not in self.class_key_lists.keys():
+                        self.class_key_lists[class_val] = []
+                        self.class_key_lists[class_val].append(i)
+                    else:
+                        self.class_key_lists[class_val].append(i)
+
+    def create_class_data_lists3d(self):
+        # NOTE: THIS IS FOR 3D DATA!!!
+        for j, i in enumerate(self.list_of_keys):
+
+            case_all_data = None    
+            if not isfile(self._data[i]['data_file'][:-4] + ".npy"):
+                # lets hope you know what you're doing
+                case_all_data = np.load(self._data[i]['data_file'][:-4] + ".npz")['data']
+            else:
+                case_all_data = np.load(self._data[i]['data_file'][:-4] + ".npy", self.memmap_mode)
+
+            case_all_data = case_all_data[-1:] # get segmentation
+            for slc_index in range(0, case_all_data.shape[1]):
+                classes_in_slice = np.unique(case_all_data[0,slc_index])
+                classes_in_slice = classes_in_slice[classes_in_slice > 0]
+
+                #print("slice index {}, classes {}".format(slc_index, classes_in_slice))
+
+                for val in classes_in_slice:
+                    if val not in self.class_key_lists.keys():
+                        self.class_key_lists[val] = {}
+
+                    if i not in self.class_key_lists[val].keys():
+                        self.class_key_lists[val][i] = []
+                    self.class_key_lists[val][i].append(slc_index)
+            if j == 1: # TODO: remove this!!!
+                break
+
+    def set_bg_pixel_cls_label(self, mask, class_label):
+        """
+        We mask pixels not the current class_label as 0, and set the pixels which are as 1
+
+        Parameters:
+            - mask: segmentation mask
+            - class_label: the value of the class in the mask
+
+        Return:
+            - An edited version of the mask
+        """
+        min_one = mask == -1
+        mask[mask != class_label] = 0
+        mask[mask == class_label] = 1
+        mask[min_one] = -1
+        return mask
+
+    def generate_train_batch(self, selected_class = None):
+        
+        if selected_class is None:
+            _selected_class = np.random.choice(self.train_classes, self.batch_size, True, None)
+            selected_class = _selected_class
+        else:
+            _selected_class = selected_class
+        
+        print(selected_class)
+        print(_selected_class)
+        
+        query_scans = []
+        support_scans = []
+        query_slices = []
+        support_slices = []
+
+        temp_query_slices = []
+        temp_support_slices = []
+
+        if self.three_dim_data:
+            for cls in selected_class: # loop through the selected classes (1 per batch)
+                selected_scans = np.random.choice(list(self.class_key_lists[cls].keys()), 1 + self.nr_shots, True, None) # choose the scans
+                selected_query_and_supports = selected_scans
+
+                # save the query and support scans in their own list
+                query_scans.append(selected_query_and_supports[0])
+
+                for i in range(1, len(selected_query_and_supports)):
+                        support_scans.append(selected_query_and_supports[i])
+
+                unique_slices = False
+                while not unique_slices : # loop untill we have all unique items
+                    temp_query_slices = []
+                    temp_support_slices = []
+
+                    selected_query_and_supports_slices = []
+                    for i in range(0, len(selected_scans)): # select slices from the scan
+                        selected_query_and_supports_slices.append(np.random.choice(self.class_key_lists[cls][selected_scans[i]], 1, False, None)[0])
+                    
+                    # save the query and support slices in their own list
+                    temp_query_slices.append(selected_query_and_supports_slices[0])
+
+                    for i in range(1, len(selected_query_and_supports_slices)):
+                        temp_support_slices.append(selected_query_and_supports_slices[i])
+
+                    # see if they are unique
+                    for scan in np.unique(selected_scans):
+                        indices_scan = selected_scans == scan
+                        if len(np.unique(np.array(selected_query_and_supports_slices)[indices_scan])) != np.sum(indices_scan):
+                            unique_slices = False
+                        else:
+                            unique_slices = True
+                
+                # save the slices in the non-temp lists
+                for q_slc in temp_query_slices:
+                    query_slices.append(q_slc)
+                for s_slc in temp_support_slices:
+                    support_slices.append(s_slc)
+
+            # add query and support scans/slice lists to get the desired order (all query, then all support)
+            selected_query_and_supports = query_scans + support_scans
+            selected_query_and_supports_slices = query_slices + support_slices
+
+        else:
+            for cls in selected_class: # loop through classes (one per batch)
+                selected_query_and_supports = np.random.choice(self.class_key_lists[cls], 1+self.nr_shots, False, None)
+                query_scans.append(selected_query_and_supports[0])
+
+                for i in range(1, len(selected_query_and_supports)):
+                    support_scans.append(selected_query_and_supports[i])
+            selected_query_and_supports = query_scans + support_scans
+
+        data = np.zeros((self.batch_size + (self.nr_shots*self.batch_size),) + self.data_shape[1:], dtype=np.float32)
+        seg = np.zeros((self.batch_size + (self.nr_shots*self.batch_size),) + self.seg_shape[1:], dtype=np.float32)
+
+        case_properties = []
+        
+        # Here j is the name of the file, i is a iterator int (0,1,2,3,..)
+        for j, i in enumerate(selected_query_and_supports):
+            if 'properties' in self._data[i].keys():
+                properties = self._data[i]['properties']
+            else:
+                properties = load_pickle(self._data[i]['properties_file'])
+            case_properties.append(properties)
+
+            if self.get_do_oversample(j):
+                force_fg = True
+            else:
+                force_fg = False
+
+            if not isfile(self._data[i]['data_file'][:-4] + ".npy"):
+                # lets hope you know what you're doing
+                case_all_data = np.load(self._data[i]['data_file'][:-4] + ".npz")['data']
+            else:
+                case_all_data = np.load(self._data[i]['data_file'][:-4] + ".npy", self.memmap_mode)
+
+            # this is for when there is just a 2d slice in case_all_data (2d support)
+            if len(case_all_data.shape) == 3:
+                # add another dimension to the np.array
+                case_all_data = case_all_data[:, None]
+
+            # first select a slice. This can be either random (no force fg) or guaranteed to contain some class
+            if not force_fg:
+                # pick one of the slices
+                random_slice = np.random.choice(case_all_data.shape[1])
+                if self.three_dim_data:
+                    random_slice = selected_query_and_supports_slices[j]
+                selected_class = None
+            else:
+                # these values should have been precomputed
+                if 'class_locations' not in properties.keys():
+                    raise RuntimeError("Please rerun the preprocessing with the newest version of nnU-Net!")
+
+                foreground_classes = np.array(
+                    [i for i in properties['class_locations'].keys() if len(properties['class_locations'][i]) != 0])
+                foreground_classes = foreground_classes[foreground_classes > 0]
+                if len(foreground_classes) == 0:
+                    selected_class = None
+                    # if no slice with foreground select random slice
+                    random_slice = np.random.choice(case_all_data.shape[1])
+                    if self.three_dim_data:
+                        random_slice = selected_query_and_supports_slices[j]
+                    print('case does not contain any foreground classes', i)
+                else:
+                    #selected_class = np.random.choice(foreground_classes)
+                    voxels_of_that_class = properties['class_locations'][_selected_class[0]]
+                    valid_slices = np.unique(voxels_of_that_class[:, 0])
+                    # select a random slice with foreground
+                    random_slice = np.random.choice(valid_slices)
+                    if self.three_dim_data:
+                        random_slice = selected_query_and_supports_slices[j]
+                    voxels_of_that_class = voxels_of_that_class[voxels_of_that_class[:, 0] == random_slice]
+                    voxels_of_that_class = voxels_of_that_class[:, 1:]
+
+            # now crop case_all_data to contain just the slice of interest. If we want additional slice above and
+            # below the current slice, here is where we get them. We stack those as additional color channels
+            if self.pseudo_3d_slices == 1:
+                case_all_data = case_all_data[:, random_slice]
+            else:
+                # this is very deprecated and will probably not work anymore. If you intend to use this you need to
+                # check this!
+
+                # determine slice range
+                mn = random_slice - (self.pseudo_3d_slices - 1) // 2
+                mx = random_slice + (self.pseudo_3d_slices - 1) // 2 + 1
+                valid_mn = max(mn, 0)
+                valid_mx = min(mx, case_all_data.shape[1])
+
+                # select data
+                case_all_seg = case_all_data[-1:]
+                case_all_data = case_all_data[:-1]
+
+                if self.average_slices:
+                    case_all_data_above = case_all_data[:, valid_mn:random_slice]
+                    case_all_data_middle = case_all_data[:, random_slice]
+                    case_all_data_below = case_all_data[:, random_slice:valid_mx]
+
+                    # average
+                    case_above_avg = np.mean(case_all_data_above, axis = 1)
+                    case_below_avg = np.mean(case_all_data_below, axis = 1)
+
+                    # merge
+                    case_all_data_zeros = np.zeros((1,3,case_all_data_middle.shape[1], case_all_data_middle.shape[2]))
+                    case_all_data_zeros[:,0] = case_above_avg
+                    case_all_data_zeros[:,1] = case_all_data_middle
+                    case_all_data_zeros[:,2] = case_below_avg
+                    case_all_data = case_all_data_zeros
+
+                else:
+                    # select multiple image slices accoring to the determined slice range
+                    case_all_data = case_all_data[:, valid_mn:valid_mx]
+
+                # select the middle segmentation slice
+                case_all_seg = case_all_seg[:, random_slice]
+
+                # determine pading
+                need_to_pad_below = valid_mn - mn
+                need_to_pad_above = mx - valid_mx
+                if not self.average_slices:
+                    if need_to_pad_below > 0:
+                        shp_for_pad = np.array(case_all_data.shape)
+                        shp_for_pad[1] = need_to_pad_below
+                        case_all_data = np.concatenate((np.zeros(shp_for_pad), case_all_data), 1)
+                    if need_to_pad_above > 0:
+                        shp_for_pad = np.array(case_all_data.shape)
+                        shp_for_pad[1] = need_to_pad_above
+                        case_all_data = np.concatenate((case_all_data, np.zeros(shp_for_pad)), 1)
+                case_all_data = case_all_data.reshape((-1, case_all_data.shape[-2], case_all_data.shape[-1]))
+                case_all_data = np.concatenate((case_all_data, case_all_seg), 0)
+
+            # case all data should now be (c, x, y)
+            assert len(case_all_data.shape) == 3
+
+            # we can now choose the bbox from -need_to_pad // 2 to shape - patch_size + need_to_pad // 2. Here we
+            # define what the upper and lower bound can be to then sample from them with np.random.randint
+
+            need_to_pad = self.need_to_pad.copy()
+            for d in range(2):
+                # if case_all_data.shape + need_to_pad is still < patch size we need to pad more! We pad on both sides
+                # always
+                if need_to_pad[d] + case_all_data.shape[d + 1] < self.patch_size[d]:
+                    need_to_pad[d] = self.patch_size[d] - case_all_data.shape[d + 1]
+
+            shape = case_all_data.shape[1:]
+            lb_x = - need_to_pad[0] // 2
+            ub_x = shape[0] + need_to_pad[0] // 2 + need_to_pad[0] % 2 - self.patch_size[0]
+            lb_y = - need_to_pad[1] // 2
+            ub_y = shape[1] + need_to_pad[1] // 2 + need_to_pad[1] % 2 - self.patch_size[1]
+
+            # if not force_fg then we can just sample the bbox randomly from lb and ub. Else we need to make sure we get
+            # at least one of the foreground classes in the patch
+            if not force_fg or selected_class is None:
+                bbox_x_lb = np.random.randint(lb_x, ub_x + 1)
+                bbox_y_lb = np.random.randint(lb_y, ub_y + 1)
+            else:
+                # this saves us a np.unique. Preprocessing already did that for all cases. Neat.
+                selected_voxel = voxels_of_that_class[np.random.choice(len(voxels_of_that_class))]
+                # selected voxel is center voxel. Subtract half the patch size to get lower bbox voxel.
+                # Make sure it is within the bounds of lb and ub
+                bbox_x_lb = max(lb_x, selected_voxel[0] - self.patch_size[0] // 2)
+                bbox_y_lb = max(lb_y, selected_voxel[1] - self.patch_size[1] // 2)
+
+            bbox_x_ub = bbox_x_lb + self.patch_size[0]
+            bbox_y_ub = bbox_y_lb + self.patch_size[1]
+
+            # whoever wrote this knew what he was doing (hint: it was me). We first crop the data to the region of the
+            # bbox that actually lies within the data. This will result in a smaller array which is then faster to pad.
+            # valid_bbox is just the coord that lied within the data cube. It will be padded to match the patch size
+            # later
+            valid_bbox_x_lb = max(0, bbox_x_lb)
+            valid_bbox_x_ub = min(shape[0], bbox_x_ub)
+            valid_bbox_y_lb = max(0, bbox_y_lb)
+            valid_bbox_y_ub = min(shape[1], bbox_y_ub)
+
+            # At this point you might ask yourself why we would treat seg differently from seg_from_previous_stage.
+            # Why not just concatenate them here and forget about the if statements? Well that's because segneeds to
+            # be padded with -1 constant whereas seg_from_previous_stage needs to be padded with 0s (we could also
+            # remove label -1 in the data augmentation but this way it is less error prone)
+
+            case_all_data = case_all_data[:, valid_bbox_x_lb:valid_bbox_x_ub,
+                            valid_bbox_y_lb:valid_bbox_y_ub]
+
+            case_all_data_donly = np.pad(case_all_data[:-1], ((0, 0),
+                                                              (-min(0, bbox_x_lb), max(bbox_x_ub - shape[0], 0)),
+                                                              (-min(0, bbox_y_lb), max(bbox_y_ub - shape[1], 0))),
+                                         self.pad_mode, **self.pad_kwargs_data)
+
+            case_all_data_segonly = np.pad(case_all_data[-1:], ((0, 0),
+                                                                (-min(0, bbox_x_lb), max(bbox_x_ub - shape[0], 0)),
+                                                                (-min(0, bbox_y_lb), max(bbox_y_ub - shape[1], 0))),
+                                           'constant', **{'constant_values': -1})
+
+            data[j] = case_all_data_donly
+            seg[j] = case_all_data_segonly
+
+        # loop through the masks in seg and edit them to only have class pixels annotated
+        # query (first items, one per class)
+        for i in range(0, len(_selected_class)):
+            seg[i] = self.set_bg_pixel_cls_label(seg[i], _selected_class[i])
+
+        # support (other items, k per class)
+        for i in range(len(_selected_class), len(seg)):
+            cur_class = int(np.floor((i-len(_selected_class))/self.nr_shots))
+            seg[i] = self.set_bg_pixel_cls_label(seg[i], _selected_class[cur_class])
+
+        keys = selected_query_and_supports
+        return {'data': data, 'seg': seg, 'properties': case_properties, "keys": keys} # data and seg should be (bs + #support * bs, c, h, w), where the first bs items are query and the others are support
 
 if __name__ == "__main__":
     t = "Task002_Heart"
@@ -600,8 +1211,10 @@ if __name__ == "__main__":
     with open(join(join(preprocessing_output_dir, t), "plans_stage1.pkl"), 'rb') as f:
         plans = pickle.load(f)
     unpack_dataset(p)
-    dl = DataLoader3D(dataset, (32, 32, 32), (32, 32, 32), 2, oversample_foreground_percent=0.33)
-    dl = DataLoader3D(dataset, np.array(plans['patch_size']).astype(int), np.array(plans['patch_size']).astype(int), 2,
-                      oversample_foreground_percent=0.33)
-    dl2d = DataLoader2D(dataset, (64, 64), np.array(plans['patch_size']).astype(int)[1:], 12,
+    # dl = DataLoader3D(dataset, (32, 32, 32), (32, 32, 32), 2, oversample_foreground_percent=0.33)
+    # dl = DataLoader3D(dataset, np.array(plans['patch_size']).astype(int), np.array(plans['patch_size']).astype(int), 2,
+    #                   oversample_foreground_percent=0.33)
+    # dl2d = DataLoader2D(dataset, (64, 64), np.array(plans['patch_size']).astype(int)[1:], 12,
+    #                     oversample_foreground_percent=0.33)
+    dl2d = DataLoader2D_fewshot(dataset, (64, 64), np.array(plans['patch_size']).astype(int)[1:], 12,
                         oversample_foreground_percent=0.33)
