@@ -71,6 +71,7 @@ def save_svg_slice_and_annotation(svg_dest, fileloc, image_slice, ground_truth_a
     predicted_annotation_masked = np.ma.masked_where(predicted_annotation == 0, predicted_annotation)
 
     p = plt.get_cmap('hsv')
+    p2 = plt.get_cmap('brg')
 
     gt_values = np.unique(ground_truth_annotation)
     pred_values = np.unique(predicted_annotation)
@@ -84,7 +85,7 @@ def save_svg_slice_and_annotation(svg_dest, fileloc, image_slice, ground_truth_a
     plt.subplot(2,3,2)
     plt.imshow(ground_truth_annotation_masked, cmap = p, alpha= 0.4); plt.title("Slice with Ground Truth annotation")
 
-    plt.subplot(3,3,3)
+    plt.subplot(2,3,3)
     im = plt.imshow(ground_truth_annotation); plt.title("Ground Truth Annotation")
 
     # (https://stackoverflow.com/questions/40662475/matplot-imshow-add-label-to-each-color-and-put-them-in-legend)
@@ -97,10 +98,17 @@ def save_svg_slice_and_annotation(svg_dest, fileloc, image_slice, ground_truth_a
     plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0. )
 
 
+    plt.subplot(2,3,4)
+    plt.imshow(image_slice, cmap='gray', vmin=-600-800, vmax=-600+800)
+    plt.subplot(2,3,4)
+    plt.imshow(ground_truth_annotation_masked, cmap = p, alpha= 0.4)
+    plt.subplot(2,3,4)
+    plt.imshow(predicted_annotation_masked, cmap = p2, alpha= 0.4); plt.title("Slice with both annotations")
+
     plt.subplot(2,3,5)
     plt.imshow(image_slice, cmap='gray', vmin=-600-800, vmax=-600+800)
     plt.subplot(2,3,5)
-    plt.imshow(predicted_annotation_masked, cmap = p, alpha= 0.4); plt.title("Slice with Predicted annotation")
+    plt.imshow(predicted_annotation_masked, cmap = p2, alpha= 0.4); plt.title("Slice with Predicted annotation")
 
     plt.subplot(2,3,6)
     im = plt.imshow(predicted_annotation); plt.title("Predicted Annotation")
@@ -115,5 +123,3 @@ def save_svg_slice_and_annotation(svg_dest, fileloc, image_slice, ground_truth_a
     plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0. )
 
     plt.savefig(svg_dest+ f"/{name[:-7]}.svg")
-
-    
