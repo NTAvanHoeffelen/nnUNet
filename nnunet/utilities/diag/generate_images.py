@@ -63,7 +63,7 @@ def generate_svgs(args):
 
 def save_svg_slice_and_annotation(svg_dest, fileloc, image_slice, ground_truth_annotation, predicted_annotation):
 
-    split_fileloc = fileloc.split('\\')
+    split_fileloc = fileloc.split('/')
     name = split_fileloc[-1]
 
     ground_truth_annotation_masked = np.ma.masked_where(ground_truth_annotation == 0, ground_truth_annotation)
