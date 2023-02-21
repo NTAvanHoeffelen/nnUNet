@@ -6,7 +6,7 @@ import os
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-
+import gc
 
 plt.rcParams["figure.figsize"] = (40,16)
 plt.rcParams.update({'font.size': 24})
@@ -60,6 +60,11 @@ def generate_svgs(args):
         # save svg of slice and annotation
         save_svg_slice_and_annotation(destination_dir, np.array(list_of_predictions)[i], selected_image_slice, grount_truth_slice[:,:,0], prediction_slice[:,:,0])
 
+        # free up memory (IMPORTANT)
+        del grount_truth_slice
+        del prediction_slice
+        del image_slice
+        gc.collect()
 
 def save_svg_slice_and_annotation(svg_dest, fileloc, image_slice, ground_truth_annotation, predicted_annotation):
 
