@@ -12,11 +12,10 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-
-from nnunet.training.network_training.nnUNetTrainerV2_baseline_512 import nnUNetTrainerV2_baseline_512
+from nnunet.training.network_training.nnUNetTrainerV2_baseline import nnUNetTrainerV2_baseline
 import numpy as np
 
-class nnUNetTrainerV2_baseline_256(nnUNetTrainerV2_baseline_512):
+class nnUNetTrainerV2_baseline_256(nnUNetTrainerV2_baseline):
     def __init__(self,  plans_file, fold, output_folder=None, dataset_directory=None, batch_dice=True, stage=None, unpack_data=True, deterministic=True, fp16=False):
         super().__init__(plans_file, fold, output_folder, dataset_directory, batch_dice, stage, unpack_data, deterministic, fp16)
         

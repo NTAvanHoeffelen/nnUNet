@@ -18,7 +18,7 @@ from nnunet.training.dataloading.dataset_loading import DataLoader3D, DataLoader
 from collections import OrderedDict
 import numpy as np
 
-class nnUNetTrainerV2_baseline_512(nnUNetTrainerV2):
+class nnUNetTrainerV2_baseline(nnUNetTrainerV2):
     def __init__(self,  plans_file, fold, output_folder=None, dataset_directory=None, batch_dice=True, stage=None, unpack_data=True, deterministic=True, fp16=False):
         super().__init__(plans_file, fold, output_folder, dataset_directory, batch_dice, stage, unpack_data, deterministic, fp16)
 
@@ -72,7 +72,31 @@ class nnUNetTrainerV2_baseline_512(nnUNetTrainerV2):
         #self.patch_size = self.new_patch_size
         # if self.pseudo_3d:
         #     self.num_input_channels = self.pseudo_3d_slices
-
+    
+    
+    def predict_preprocessed_data_return_seg_and_softmax(self, data: np.ndarray, do_mirroring: bool = True,
+                                                         mirror_axes: Tuple[int] = None,
+                                                         use_sliding_window: bool = True, step_size: float = 0.5,
+                                                         use_gaussian: bool = True, pad_border_mode: str = 'constant',
+                                                         pad_kwargs: dict = None, all_in_gpu: bool = False,
+                                                         verbose: bool = True, mixed_precision=True) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        We need to wrap this because we need to enforce self.network.do_ds = False for prediction
+        """
+        ds = self.network.do_ds
+        self.network.do_ds = False
+        do_mirroring = False
+        ret = super().predict_preprocessed_data_return_seg_and_softmax(data,
+                                                                       do_mirroring=do_mirroring,
+                                                                       mirror_axes=mirror_axes,
+                                                                       use_sliding_window=use_sliding_window,
+                                                                       step_size=step_size, use_gaussian=use_gaussian,
+                                                                       pad_border_mode=pad_border_mode,
+                                                                       pad_kwargs=pad_kwargs, all_in_gpu=all_in_gpu,
+                                                                       verbose=verbose,
+                                                                       mixed_precision=mixed_precision)
+        self.network.do_ds = ds
+        return ret
 
     # def get_basic_generators(self):
     #     self.load_dataset()
