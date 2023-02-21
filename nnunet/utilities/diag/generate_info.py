@@ -48,7 +48,8 @@ def generate_csv(args, training_time):
                    'Fold': [folds],
                    'Mean Dice (Test)': [mean_testing_dice],
                    'STD Dice (Test)': [std_testing_dice],
-                   'Training time (in seconds)': [training_time]
+                   'Training time (in seconds)': [training_time],
+                   'NOTE': [args.note]
                    })
     df.to_csv(csv_destination_loc + csv_name ,index=False)
 
