@@ -34,7 +34,7 @@ def make_if_dont_exist(folder_path, overwrite=False, ):
 def generate_svgs(args):
     ground_truth_dir = args.ground_truth
     prediction_dir = args.prediction
-    image_dir = args.input_data
+    image_dir = args.input
 
     destination_dir = args.prediction + "/images"
 
@@ -62,7 +62,6 @@ def generate_svgs(args):
 
 
 def save_svg_slice_and_annotation(svg_dest, fileloc, image_slice, ground_truth_annotation, predicted_annotation):
-    # TODO: check if correct
 
     split_fileloc = fileloc.split('\\')
     name = split_fileloc[-1]

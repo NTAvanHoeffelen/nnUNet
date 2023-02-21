@@ -8,7 +8,7 @@ def generate_csv(args, training_time):
     report_loc = args.prediction
 
     # get task name
-    split_fileloc = report_loc.split('\\')
+    split_fileloc = report_loc.split('/')
     task_name = split_fileloc[-3]           # e.g. Task102_COPDGene_LeftSuperiorLobe_256_50_slices_1_pseudo_0
 
     dataset_json_loc = args.data + "/nnUNet_raw_data/" + task_name
