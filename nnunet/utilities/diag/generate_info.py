@@ -7,6 +7,8 @@ def generate_csv(args, training_time):
 
     report_loc = args.prediction
 
+    all_test_results_loc = '/mnt/netcache/bodyct/experiments/few_shot_segmentation_datasets/full_datasets/COPDGene/Classes'
+
     # get task name
     split_fileloc = report_loc.split('/')
     task_name = split_fileloc[-3]           # e.g. Task102_COPDGene_LeftSuperiorLobe_256_50_slices_1_pseudo_0
@@ -41,6 +43,9 @@ def generate_csv(args, training_time):
     csv_destination_loc = report_loc
     csv_name = "/TESTING_RESULTS.csv"
 
+    csv_all_testing_results = all_test_results_loc
+    csv_all_data_name = "/ALL_TESTING_RESULTS.csv"
+
     df = pd.DataFrame({'Task Name': [task_name],
                    'Class': [class_name],
                    'Trainer': [network_trainer],
@@ -53,3 +58,11 @@ def generate_csv(args, training_time):
                    })
     df.to_csv(csv_destination_loc + csv_name ,index=False)
 
+    try:
+        all_testing_results_df = pd.read_csv(csv_all_testing_results + csv_all_data_name, sep = ",", on_bad_lines='skip')
+        frames = [all_testing_results_df, df]
+        all_testing_results_df = pd.concat(frames, axis = 0)
+
+        all_testing_results_df.to_csv(csv_all_testing_results + csv_all_data_name, index = False)
+    except:
+        df.to_csv(csv_all_testing_results + csv_all_data_name, index = False)
