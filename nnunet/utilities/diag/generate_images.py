@@ -64,6 +64,7 @@ def generate_svgs(args):
         del grount_truth_slice
         del prediction_slice
         del image_slice
+        del selected_image_slice
         gc.collect()
 
 def save_svg_slice_and_annotation(svg_dest, fileloc, image_slice, ground_truth_annotation, predicted_annotation):
@@ -128,3 +129,21 @@ def save_svg_slice_and_annotation(svg_dest, fileloc, image_slice, ground_truth_a
     plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0. )
 
     plt.savefig(svg_dest+ f"/{name[:-7]}.svg")
+
+    plt.clf()
+    plt.cla()
+    plt.close()
+
+    del ground_truth_annotation_masked
+    del predicted_annotation_masked
+    del p
+    del p2
+    del pred_values
+    del gt_values
+    del im
+    del colors
+    del patches
+    del image_slice
+    del ground_truth_annotation
+    del predicted_annotation
+    gc.collect()
