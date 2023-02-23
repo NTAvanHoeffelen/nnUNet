@@ -128,7 +128,7 @@ def save_svg_slice_and_annotation(svg_dest, fileloc, image_slice, ground_truth_a
     # put those patched as legend-handles into the legend
     plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0. )
 
-    plt.savefig(svg_dest+ f"/{name[:-7]}.svg")
+    plt.savefig(svg_dest+ f"/{name[:-7]}.png")
 
     plt.clf()
     plt.cla()
