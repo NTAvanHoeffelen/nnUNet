@@ -2,6 +2,7 @@ import json
 import numpy as np
 import glob
 import pandas as pd
+import math
 
 def generate_csv(args, training_time):
 
@@ -25,9 +26,25 @@ def generate_csv(args, training_time):
 
     # keep track of the Dice per scan
     dice_per_scan = []
+    dice_per_pos_scan  = []
+    neg_total_positives = []
     for scan in sum_data['results']['all']:
-        dice_per_scan.append(scan['1']['Dice'])
 
+        # check for nan
+        if not math.isnan(scan['1']['Dice']):
+            
+            dice_per_scan.append(scan['1']['Dice'])
+
+            # check if task was from a positive scan
+            split_fileloc = scan['reference'].split('/')
+            scan_name = split_fileloc[-1]
+            if scan_name[-10:-7] != 'neg':
+                dice_per_pos_scan.append(scan['1']['Dice'])
+         
+        split_fileloc = scan['reference'].split('/')
+        scan_name = split_fileloc[-1]
+        if scan_name[-10:-7] == 'neg':
+            neg_total_positives.append(scan['1']['Total Positives Test'])
 
     # more information for the csv
     class_name = dataset_data['labels']['1']
@@ -35,7 +52,10 @@ def generate_csv(args, training_time):
     folds = args.fold
     network_trainer = args.trainer
     mean_testing_dice = sum_data['results']['mean']['1']['Dice']
+    mean_pos_testing_dice = np.mean(dice_per_pos_scan)
+    mean_total_pos_per_neg_scan = np.mean(neg_total_positives)
     std_testing_dice = np.std(dice_per_scan)
+    std_pos_testing_dice = np.std(dice_per_pos_scan)
 
     summary_file.close()
     dataset_file.close()
@@ -52,7 +72,10 @@ def generate_csv(args, training_time):
                    'Slices': [nr_slices],
                    'Fold': [folds],
                    'Mean Dice (Test)': [mean_testing_dice],
+                   'Mean Dice (only pos cases)': [mean_pos_testing_dice],
                    'STD Dice (Test)': [std_testing_dice],
+                   'STD Dice (only pos cases)': [std_pos_testing_dice],
+                   'Mean positive pixels in negative cases': [mean_total_pos_per_neg_scan],
                    'Training time (in seconds)': [training_time],
                    'NOTE': [args.note]
                    })
