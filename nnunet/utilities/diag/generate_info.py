@@ -75,7 +75,7 @@ def generate_csv(args, training_time):
                    'Mean Dice (only pos cases)': [mean_pos_testing_dice],
                    'STD Dice (Test)': [std_testing_dice],
                    'STD Dice (only pos cases)': [std_pos_testing_dice],
-                   'Mean positive pixels in negative cases': [mean_total_pos_per_neg_scan],
+                   'Mean positive pixels in negative cases': [float("{:.4f}".format(mean_total_pos_per_neg_scan))],
                    'Training time (in seconds)': [training_time],
                    'NOTE': [args.note]
                    })
