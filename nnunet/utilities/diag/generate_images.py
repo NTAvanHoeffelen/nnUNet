@@ -51,11 +51,9 @@ def generate_svgs(args):
     list_of_predictions = sorted(glob.glob(prediction_dir + "/*.nii.gz"))
     list_of_images = sorted(glob.glob(image_dir + "/*.nii.gz"))
 
-    part = 0
-    add_counter = 0
     # gerate a multipage pdf:
-    with PdfPages(prediction_dir + '/All_test_results_{}.pdf'.format(part)) as pdf:
-        for i in range(0, len(ground_truth_dir)):
+    with PdfPages(prediction_dir + '/All_test_results.pdf') as pdf:
+        for i in range(0, len(list_of_ground_truths)):
             # load slice
             grount_truth_slice, _ = io.load(list_of_ground_truths[i])
             prediction_slice, _ = io.load(list_of_predictions[i])
@@ -79,12 +77,6 @@ def generate_svgs(args):
             del image_slice
             del selected_image_slice
             gc.collect()
-
-            add_counter += 1
-
-            if add_counter == 100:
-                part += 1
-                add_counter = 0
 
      # close summary file
     summary_file.close()
