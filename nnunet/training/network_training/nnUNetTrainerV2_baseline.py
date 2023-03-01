@@ -72,7 +72,7 @@ class nnUNetTrainerV2_baseline(nnUNetTrainerV2):
         self.batch_size = self.new_batch_size
         #self.patch_size = self.new_patch_size
         # if self.pseudo_3d:
-        #     self.num_input_channels = self.pseudo_3d_slices
+        #   self.num_input_channels = self.pseudo_3d_slices
     
     
     def predict_preprocessed_data_return_seg_and_softmax(self, data: np.ndarray, do_mirroring: bool = True,
