@@ -18,7 +18,7 @@ import shutil
 from batchgenerators.utilities.file_and_folder_operations import *
 from multiprocessing import Pool
 from collections import OrderedDict
-
+import nnunet.utilities.shutil_sol as shutil_sol
 
 def create_nonzero_mask(data):
     from scipy.ndimage import binary_fill_holes
@@ -106,8 +106,19 @@ def crop_to_nonzero(data, seg=None, nonzero_label=-1):
         seg = np.vstack(cropped_seg)
 
     nonzero_mask = crop_to_bbox(nonzero_mask, bbox)[None]
+
+    if nonzero_mask.shape[-1] == 1:
+        mid = None
+    elif nonzero_mask.shape[-1] == 3:
+        mid = 1
+    else:
+        mid = int(np.ceil(nonzero_mask.shape[-1]/2) - 1)
+
     if seg is not None:
-        seg[(seg == 0) & (nonzero_mask == 0)] = nonzero_label
+        if mid is None:
+            seg[(seg == 0) & (nonzero_mask == 0)] = nonzero_label
+        else:
+            seg[(seg == 0) & (nonzero_mask[mid] == 0)] = nonzero_label
     else:
         nonzero_mask = nonzero_mask.astype(int)
         nonzero_mask[nonzero_mask == 0] = nonzero_label
@@ -194,7 +205,7 @@ class ImageCropper(object):
         maybe_mkdir_p(output_folder_gt)
         for j, case in enumerate(list_of_files):
             if case[-1] is not None:
-                shutil.copy(case[-1], output_folder_gt)
+                shutil_sol.copyfile(case[-1], output_folder_gt)
 
         list_of_args = []
         for j, case in enumerate(list_of_files):
