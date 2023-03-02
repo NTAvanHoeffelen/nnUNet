@@ -107,22 +107,22 @@ def crop_to_nonzero(data, seg=None, nonzero_label=-1):
 
     nonzero_mask = crop_to_bbox(nonzero_mask, bbox)[None]
 
-    if nonzero_mask.shape[-1] == 1:
+    if nonzero_mask.shape[1] == 1:
         mid = None
-    elif nonzero_mask.shape[-1] == 3:
+    elif nonzero_mask.shape[1] == 3:
         mid = 1
     else:
-        mid = int(np.ceil(nonzero_mask.shape[-1]/2) - 1)
+        mid = int(np.ceil(nonzero_mask.shape[1]/2) - 1)
 
     print(seg.shape)
     print(nonzero_mask.shape)
-    print(np.expand_dims(nonzero_mask[:,:,mid], axis=-1).shape)
-    
+    print(np.expand_dims(nonzero_mask[:,mid,:,:], axis=1).shape)
+
     if seg is not None:
         if mid is None:
             seg[(seg == 0) & (nonzero_mask == 0)] = nonzero_label
         else:
-            seg[(seg == 0) & (np.expand_dims(nonzero_mask[:,:,mid], axis=-1) == 0)] = nonzero_label
+            seg[(seg == 0) & (np.expand_dims(nonzero_mask[:,mid,:,:], axis=1) == 0)] = nonzero_label
     else:
         nonzero_mask = nonzero_mask.astype(int)
         nonzero_mask[nonzero_mask == 0] = nonzero_label
