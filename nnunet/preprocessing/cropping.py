@@ -118,7 +118,7 @@ def crop_to_nonzero(data, seg=None, nonzero_label=-1):
         if mid is None:
             seg[(seg == 0) & (nonzero_mask == 0)] = nonzero_label
         else:
-            seg[(seg == 0) & (nonzero_mask[mid] == 0)] = nonzero_label
+            seg[(seg == 0) & (np.expand_dims(nonzero_mask[:,:,mid], axis=-1) == 0)] = nonzero_label
     else:
         nonzero_mask = nonzero_mask.astype(int)
         nonzero_mask[nonzero_mask == 0] = nonzero_label
