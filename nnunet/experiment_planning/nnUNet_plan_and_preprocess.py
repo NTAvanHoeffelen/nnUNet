@@ -19,6 +19,7 @@ from nnunet.experiment_planning.DatasetAnalyzer import DatasetAnalyzer
 from nnunet.experiment_planning.utils import crop
 from nnunet.paths import *
 import shutil
+import nnunet.utilities.shutil_sol as shutil_sol
 from nnunet.utilities.task_name_id_conversion import convert_id_to_task_name
 from nnunet.preprocessing.sanity_checks import verify_dataset_integrity
 from nnunet.training.model_restore import recursive_find_python_class
@@ -140,10 +141,9 @@ def main():
         dataset_analyzer = DatasetAnalyzer(cropped_out_dir, overwrite=False, num_processes=tf)  # this class creates the fingerprint
         _ = dataset_analyzer.analyze_dataset(collect_intensityproperties)  # this will write output files that will be used by the ExperimentPlanner
 
-
         maybe_mkdir_p(preprocessing_output_dir_this_task)
-        shutil.copy(join(cropped_out_dir, "dataset_properties.pkl"), preprocessing_output_dir_this_task)
-        shutil.copy(join(nnUNet_raw_data, t, "dataset.json"), preprocessing_output_dir_this_task)
+        shutil_sol.copyfile(join(cropped_out_dir, "dataset_properties.pkl"), preprocessing_output_dir_this_task)
+        shutil_sol.copyfile(join(nnUNet_raw_data, t, "dataset.json"), preprocessing_output_dir_this_task)
 
         threads = (tl, tf)
 
