@@ -54,9 +54,11 @@ def generate_svgs(args):
     list_of_predictions = sorted(glob.glob(prediction_dir + "/*.nii.gz"))
     list_of_images = sorted(glob.glob(image_dir + "/*.nii.gz"))
 
-    mid_slice_id = str(int(len(list_of_images)//len(list_of_ground_truths)) - 1)
+    if len(list_of_images) == len(list_of_ground_truths):
+        mid_slice_id = 0
+    else:
+        mid_slice_id = str(int(len(list_of_images)//len(list_of_ground_truths)) - 2)
 
-    print(mid_slice_id)
     while len(mid_slice_id) < 4:
         mid_slice_id = "0" + mid_slice_id
     
@@ -106,7 +108,10 @@ def generate_summary_pdf(args):
     list_of_ground_truths = sorted(glob.glob(ground_truth_dir + f"/*.nii.gz"))
     list_of_images = sorted(glob.glob(image_dir + "/*.nii.gz"))
 
-    mid_slice_id = str(int(len(list_of_images)//len(list_of_ground_truths)) - 1)
+    if len(list_of_images) == len(list_of_ground_truths):
+        mid_slice_id = str(0)
+    else:
+        mid_slice_id = str(int(len(list_of_images)//len(list_of_ground_truths)) - 2)
 
     while len(mid_slice_id) < 4:
         mid_slice_id = "0" + mid_slice_id
