@@ -17,7 +17,7 @@ plt.rcParams.update({'font.size': 24})
 
 
 # from (https://github.com/IML-DKFZ/nnunet-workshop/blob/main/nnU-Net_Workshop.ipynb)
-def make_if_dont_exist(folder_path, overwrite=False, ):
+def make_if_dont_exist(folder_path, overwrite=False):
         """
         creates a folder if it does not exists
         input: 
@@ -64,6 +64,9 @@ def generate_svgs(args):
     
     list_of_images = sorted(glob.glob(image_dir + f"/*{mid_slice_id}.nii.gz"))
 
+    vmin = args.window_min
+    vmax = args.window_max
+
     # gerate a multipage pdf:
     with PdfPages(prediction_dir + '/All_test_results.pdf') as pdf:
         for i in range(0, len(list_of_ground_truths)):
@@ -76,7 +79,7 @@ def generate_svgs(args):
             dice_score_slice, _, _ = get_info_fast(summary_data, i)
 
             # save svg of slice and annotation
-            save_svg_slice_and_annotation(destination_dir, np.array(list_of_predictions)[i], image_slice[:,:,0], grount_truth_slice[:,:,0], prediction_slice[:,:,0], dice_score_slice, pdf)
+            save_svg_slice_and_annotation(destination_dir, np.array(list_of_predictions)[i], image_slice[:,:,0], grount_truth_slice[:,:,0], prediction_slice[:,:,0], dice_score_slice, pdf, vmin, vmax)
 
             # free up memory (IMPORTANT)
             del grount_truth_slice
@@ -119,6 +122,9 @@ def generate_summary_pdf(args):
     list_of_predictions = sorted(glob.glob(prediction_dir + f"/*.nii.gz"))
     list_of_ground_truths = sorted(glob.glob(ground_truth_dir + f"/*.nii.gz"))
     list_of_images = sorted(glob.glob(image_dir + f"/*{mid_slice_id}.nii.gz"))
+
+    vmin = args.window_min
+    vmax = args.window_max
 
     # Find the index of each positive and negative case
     scan_counter = 0
@@ -184,7 +190,9 @@ def generate_summary_pdf(args):
                                                   fpr_slice,
                                                   pdf,
                                                   i,
-                                                  len(list_of_ground_truths))
+                                                  len(list_of_ground_truths),
+                                                  vmin,
+                                                  vmax)
             
             # free up memory (IMPORTANT)
             del grount_truth_slice
@@ -232,7 +240,9 @@ def generate_summary_pdf(args):
                                                   total_positives_slice,
                                                   pdf,
                                                   i,
-                                                  len(list_of_ground_truths))
+                                                  len(list_of_ground_truths),
+                                                  vmin,
+                                                  vmax)
             
             # free up memory (IMPORTANT)
             del grount_truth_slice
@@ -266,7 +276,7 @@ def get_info_fast(summary_data, i):
     FPR = summary_data['results']['all'][i]['1']['False Positive Rate']
     return DICE, FNR, FPR 
 
-def save_svg_slice_and_annotation(svg_dest, fileloc, image_slice, ground_truth_annotation, predicted_annotation, dice_score_slice, pdf):
+def save_svg_slice_and_annotation(svg_dest, fileloc, image_slice, ground_truth_annotation, predicted_annotation, dice_score_slice, pdf, vmin, vmax):
 
     split_fileloc = fileloc.split('/')
     name = split_fileloc[-1]
@@ -281,14 +291,9 @@ def save_svg_slice_and_annotation(svg_dest, fileloc, image_slice, ground_truth_a
     gt_values = np.unique(ground_truth_annotation)
     pred_values = np.unique(predicted_annotation)
 
-    mid = -500
-    dev = 800
-    vmin = mid-dev
-    vmax = mid+dev
-
     fig = plt.figure()
 
-    plt.suptitle("{}; Dice {:.4f}; Level: {} ± {}".format(name[:-7], dice_score_slice, mid, dev))
+    plt.suptitle("{}; Dice {:.4f}; Level: {} -- {}".format(name[:-7], dice_score_slice, vmin, vmax))
     plt.subplot(2,3,1)
     plt.imshow(image_slice, cmap='gray', vmin=vmin, vmax=vmax); plt.title("Slice")
     plt.axis('off')
@@ -383,7 +388,7 @@ def generate_custom_cmap(from_rgb,to_rgb):
     cmap = LinearSegmentedColormap('custom_cmap', cdict)
     return cmap
 
-def save_svg_slice_and_annotation_summary(fileloc, image_slice, ground_truth_annotation, predicted_annotation, dice_score_slice, fnr_slice, fpr_slice, pdf, dice_nr, total_test_size):
+def save_svg_slice_and_annotation_summary(fileloc, image_slice, ground_truth_annotation, predicted_annotation, dice_score_slice, fnr_slice, fpr_slice, pdf, dice_nr, total_test_size, vmin, vmax):
 
     split_fileloc = fileloc.split('/')
     name = split_fileloc[-1]
@@ -403,14 +408,9 @@ def save_svg_slice_and_annotation_summary(fileloc, image_slice, ground_truth_ann
     p2 = generate_custom_cmap([0, 1, 0], [0, 1, 0])
     p3 =  generate_custom_cmap([1, 0, 0], [1, 0, 0])
 
-    mid = -500
-    dev = 800
-    vmin = mid-dev
-    vmax = mid+dev
-
     fig = plt.figure()
     ax = fig.add_subplot(121)
-    plt.suptitle("{}; #{}/{} Dice {:.4f}; FNR {:.4f}; FPR {:.4f}; Level: {} ± {}".format(name[:-7], dice_nr+1, total_test_size, dice_score_slice, fnr_slice, fpr_slice, mid, dev))
+    plt.suptitle("{}; #{}/{} Dice {:.4f}; FNR {:.4f}; FPR {:.4f}; Level: {} -- {}".format(name[:-7], dice_nr+1, total_test_size, dice_score_slice, fnr_slice, fpr_slice, vmin, vmax))
     ax.imshow(image_slice, cmap='gray', vmin=vmin, vmax=vmax); ax.set_title("Slice")
     ax.axis('off')
 
@@ -452,7 +452,7 @@ def save_svg_slice_and_annotation_summary(fileloc, image_slice, ground_truth_ann
     gc.collect()
 
 
-def save_svg_slice_and_annotation_summary_neg(fileloc, image_slice, ground_truth_annotation, predicted_annotation, total_positives_slice, pdf, slice_nr, total_test_size):
+def save_svg_slice_and_annotation_summary_neg(fileloc, image_slice, ground_truth_annotation, predicted_annotation, total_positives_slice, pdf, slice_nr, total_test_size, vmin, vmax):
 
     split_fileloc = fileloc.split('/')
     name = split_fileloc[-1]
@@ -472,14 +472,9 @@ def save_svg_slice_and_annotation_summary_neg(fileloc, image_slice, ground_truth
     p2 = generate_custom_cmap([0, 1, 0], [0, 1, 0])
     p3 =  generate_custom_cmap([1, 0, 0], [1, 0, 0])
 
-    mid = -500
-    dev = 800
-    vmin = mid-dev
-    vmax = mid+dev
-
     fig = plt.figure()
     ax = fig.add_subplot(121)
-    plt.suptitle("{}; #{}/{} total positives {}; Level: {} ± {}".format(name[:-7], slice_nr+1, total_test_size, total_positives_slice, mid, dev))
+    plt.suptitle("{}; #{}/{} total positives {}; Level: {} -- {}".format(name[:-7], slice_nr+1, total_test_size, total_positives_slice, vmin, vmax))
     ax.imshow(image_slice, cmap='gray', vmin=vmin, vmax=vmax); ax.set_title("Slice")
     ax.axis('off')
 
