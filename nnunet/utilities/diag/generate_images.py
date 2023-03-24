@@ -55,7 +55,7 @@ def generate_svgs(args):
     list_of_images = sorted(glob.glob(image_dir + "/*.nii.gz"))
 
     if len(list_of_images) == len(list_of_ground_truths):
-        mid_slice_id = 0
+        mid_slice_id = str(0)
     else:
         mid_slice_id = str(int(len(list_of_images)//len(list_of_ground_truths)) - 2)
 

@@ -9,7 +9,7 @@ def generate_csv(args, training_time):
     report_loc = args.prediction
 
     # TODO change this dir
-    all_test_results_loc = '/mnt/netcache/bodyct/experiments/few_shot_segmentation_datasets/full_datasets/COPDGene/Classes'
+    all_test_results_loc = '/mnt/netcache/bodyct/experiments/few_shot_segmentation_datasets/baseline_datasets'
 
     # get task name
     split_fileloc = report_loc.split('/')
@@ -76,7 +76,7 @@ def generate_csv(args, training_time):
                    'Mean Dice (only pos cases)': [mean_pos_testing_dice],
                    'STD Dice (Test)': [std_testing_dice],
                    'STD Dice (only pos cases)': [std_pos_testing_dice],
-                   'Mean positive pixels in negative cases': [int("{:.4f}".format(mean_total_pos_per_neg_scan))],
+                   'Mean positive pixels in negative cases': [float("{:.2f}".format(mean_total_pos_per_neg_scan))],
                    'Training time (in seconds)': [training_time],
                    'NOTE': [args.note]
                    })
