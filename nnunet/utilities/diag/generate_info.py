@@ -20,15 +20,18 @@ def generate_csv(args, training_time):
     # Opening JSON file
     summary_file = open(report_loc + '/summary.json')
     dataset_file = open(dataset_json_loc + "/dataset.json")
+    class_json_file = open(args.class_json)
     
     # load the JSON file
     sum_data = json.load(summary_file)
     dataset_data = json.load(dataset_file)
+    class_json_data = json.load(class_json_file)
 
     # keep track of the Dice per scan
     dice_per_scan = []
     dice_per_pos_scan  = []
-    neg_total_positives = []
+    fpr_per_scan = []
+    #neg_total_positives = []
     for scan in sum_data['results']['all']:
 
         # check for nan
@@ -41,22 +44,34 @@ def generate_csv(args, training_time):
             scan_name = split_fileloc[-1]
             if scan_name[-10:-7] != 'neg':
                 dice_per_pos_scan.append(scan['1']['Dice'])
+        
+        if not math.isnan(scan['1']['False Positive Rate']):
+            fpr_per_scan.append(scan['1']['False Positive Rate'])
          
-        split_fileloc = scan['reference'].split('/')
-        scan_name = split_fileloc[-1]
-        if scan_name[-10:-7] == 'neg':
-            neg_total_positives.append(scan['1']['Total Positives Test'])
+        # split_fileloc = scan['reference'].split('/')
+        # scan_name = split_fileloc[-1]
+        # if scan_name[-10:-7] == 'neg':
+        #     neg_total_positives.append(scan['1']['Total Positives Test'])
 
     # more information for the csv
     class_name = dataset_data['labels']['1']
     nr_slices = dataset_data['numTraining']
     folds = args.fold
     network_trainer = args.trainer
-    mean_testing_dice = sum_data['results']['mean']['1']['Dice']
-    mean_pos_testing_dice = np.mean(dice_per_pos_scan)
-    mean_total_pos_per_neg_scan = np.mean(neg_total_positives)
-    std_testing_dice = np.std(dice_per_scan)
-    std_pos_testing_dice = np.std(dice_per_pos_scan)
+    positive_training_cases = class_json_data['train_slice_options']
+    negative_training_cases = class_json_data['train_slice_options_negatives']
+    
+    positive_test_cases = class_json_data['test_slice_amount']
+    negative_test_cases = class_json_data['test_slice_negative_amount']
+
+    mean_testing_dice = format(sum_data['results']['mean']['1']['Dice'], '.4f')
+    std_testing_dice = format(np.std(dice_per_scan), '.4f')
+
+    mean_pos_testing_dice = format(np.mean(dice_per_pos_scan), '.4f')
+    std_pos_testing_dice = format(np.std(dice_per_pos_scan), '.4f')
+
+    mean_fpr = format(np.mean(fpr_per_scan), '.4f')
+    std_fpr = format(np.std(fpr_per_scan), '.4f')
 
     summary_file.close()
     dataset_file.close()
@@ -70,13 +85,12 @@ def generate_csv(args, training_time):
     df = pd.DataFrame({'Task Name': [task_name],
                    'Class': [class_name],
                    'Trainer': [network_trainer],
-                   'Slices': [nr_slices],
+                   'Train Slices (pos/neg)': [f'{positive_training_cases} / {negative_training_cases}'],
+                   'Test Slices (pos/neg)': [f'{positive_test_cases} / {negative_test_cases}'],
                    'Fold': [folds],
-                   'Mean Dice (Test)': [mean_testing_dice],
-                   'Mean Dice (only pos cases)': [mean_pos_testing_dice],
-                   'STD Dice (Test)': [std_testing_dice],
-                   'STD Dice (only pos cases)': [std_pos_testing_dice],
-                   'Mean positive pixels in negative cases': [float("{:.2f}".format(mean_total_pos_per_neg_scan))],
+                   'Mean ± Std Dice (Test)': [f'{mean_testing_dice} ± {std_testing_dice}'],
+                   'Mean ± Std Dice (only pos cases)': [f'{mean_pos_testing_dice} ± {std_pos_testing_dice}'],
+                   'False Positive Rate': [f'{mean_fpr} ± {std_fpr}'],
                    'Training time (in seconds)': [training_time],
                    'NOTE': [args.note]
                    })

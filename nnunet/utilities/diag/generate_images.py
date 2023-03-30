@@ -200,22 +200,24 @@ def generate_summary_pdf(args):
             del image_slice
             gc.collect()
     
-    neg_total_positives = []
+    neg_fnr = []
+    neg_fpr = []
 
     # get dice of each positive scan (but not the nan dice values)
     for indx in neg_scan_indices:
         # check for nan
-        neg_total_positives.append(summary_data['results']['all'][indx]['1']['Total Positives Test'])
+        neg_fnr.append(summary_data['results']['all'][indx]['1']['False Negative Rate'])
+        neg_fpr.append(summary_data['results']['all'][indx]['1']['False Positive Rate'])
 
      # sort indices from smallest to biggest dice
-    total_positives_indices = np.argsort(neg_total_positives)
+    sorted_neg_fpr = np.argsort(neg_fpr)
 
     # flip indices from biggest to smallest dice
-    total_positives_indices = np.flip(total_positives_indices)
+    sorted_neg_fpr = np.flip(sorted_neg_fpr)
 
     # calculate the indices when picking nr_pics
     nr_pics = 5
-    step = len(total_positives_indices)//(nr_pics -1)
+    step = len(sorted_neg_fpr)//(nr_pics -1)
     pic_indices = [0]
     for i in range(1, nr_pics):
         pic_indices.append(int(step*i) - 1)
@@ -223,21 +225,23 @@ def generate_summary_pdf(args):
     with PdfPages(prediction_dir + '/Summary_neg_test_cases.pdf') as pdf:
         for i in pic_indices:
 
-            indx = neg_scan_indices[total_positives_indices[i]]
+            indx = neg_scan_indices[sorted_neg_fpr[i]]
 
             grount_truth_slice, _ = io.load(list_of_ground_truths[indx])
             prediction_slice, _ = io.load(list_of_predictions[indx])
             image_slice, _ = io.load(list_of_images[indx])
 
-            # get the dice of slice
-            total_positives_slice = neg_total_positives[total_positives_indices[i]]
+            slice_neg_fpr = neg_fpr[sorted_neg_fpr[i]]
+            slice_neg_fnr = neg_fnr[sorted_neg_fpr[i]]
 
             # save svg of slice and annotation
-            save_svg_slice_and_annotation_summary_neg(np.array(list_of_predictions)[indx],
+            save_svg_slice_and_annotation_summary(np.array(list_of_predictions)[indx],
                                                   image_slice[:,:,0],
                                                   grount_truth_slice[:,:,0],
                                                   prediction_slice[:,:,0],
-                                                  total_positives_slice,
+                                                  0,
+                                                  slice_neg_fnr,
+                                                  slice_neg_fpr,
                                                   pdf,
                                                   i,
                                                   len(list_of_ground_truths),
@@ -411,70 +415,6 @@ def save_svg_slice_and_annotation_summary(fileloc, image_slice, ground_truth_ann
     fig = plt.figure()
     ax = fig.add_subplot(121)
     plt.suptitle("{}; #{}/{} Dice {:.4f}; FNR {:.4f}; FPR {:.4f}; Level: {} -- {}".format(name[:-7], dice_nr+1, total_test_size, dice_score_slice, fnr_slice, fpr_slice, vmin, vmax))
-    ax.imshow(image_slice, cmap='gray', vmin=vmin, vmax=vmax); ax.set_title("Slice")
-    ax.axis('off')
-
-    ax2 = fig.add_subplot(122)
-    ax2.imshow(image_slice, cmap='gray', vmin=vmin, vmax=vmax)
-    im_tp = ax2.imshow(tp, cmap = p, alpha= 0.5, label= 'TP')
-    im_fn = ax2.imshow(fn, cmap = p2, alpha= 0.5, label= 'FN')
-    im_fp = ax2.imshow(fp, cmap = p3, alpha= 0.5, label= 'FP'); ax.set_title("Slice with both annotations")
-    ax2.axis('off')
-
-    #(https://stackoverflow.com/questions/40662475/matplot-imshow-add-label-to-each-color-and-put-them-in-legend)
-    # get the colors of the values, according to the 
-    # colormap used by imshow
-    vals = [1,1,1]
-    labels = ["TP", "FN", "FP"]
-    colors = [im_tp.cmap(im_tp.norm(1)), im_fn.cmap(im_tp.norm(1)), im_fp.cmap(im_tp.norm(1))]
-    # create a patch (proxy artist) for every color 
-    patches = [mpatches.Patch(color=colors[i], label="{}".format(labels[i]) ) for i in range(len(vals)) ]
-    # put those patched as legend-handles into the legend
-    plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0. )
-    
-    # add to pdf
-    pdf.savefig(fig)
-
-    plt.clf()
-    plt.cla()
-    plt.close()
-
-    del p
-    del p2
-    del p3
-    del tp
-    del fp
-    del fn
-    del image_slice
-    del ground_truth_annotation
-    del predicted_annotation
-    del fig
-    gc.collect()
-
-
-def save_svg_slice_and_annotation_summary_neg(fileloc, image_slice, ground_truth_annotation, predicted_annotation, total_positives_slice, pdf, slice_nr, total_test_size, vmin, vmax):
-
-    split_fileloc = fileloc.split('/')
-    name = split_fileloc[-1]
-
-    # set gt to 2
-    ground_truth_annotation[ground_truth_annotation == 1] = 2
-
-    # combine the masks    
-    combined_annotation = ground_truth_annotation + predicted_annotation
-
-    # extract tp, fp, fn
-    tp = np.ma.masked_where(combined_annotation != 3, combined_annotation) # yellow
-    fn = np.ma.masked_where(combined_annotation != 2, combined_annotation) # green
-    fp = np.ma.masked_where(combined_annotation != 1, combined_annotation) # red
-    
-    p = generate_custom_cmap([1, 1, 0], [1, 1, 0])
-    p2 = generate_custom_cmap([0, 1, 0], [0, 1, 0])
-    p3 =  generate_custom_cmap([1, 0, 0], [1, 0, 0])
-
-    fig = plt.figure()
-    ax = fig.add_subplot(121)
-    plt.suptitle("{}; #{}/{} total positives {}; Level: {} -- {}".format(name[:-7], slice_nr+1, total_test_size, total_positives_slice, vmin, vmax))
     ax.imshow(image_slice, cmap='gray', vmin=vmin, vmax=vmax); ax.set_title("Slice")
     ax.axis('off')
 
