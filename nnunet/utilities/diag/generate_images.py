@@ -224,7 +224,7 @@ def generate_summary_pdf(args):
 
     with PdfPages(prediction_dir + '/Summary_neg_test_cases.pdf') as pdf:
         for i in pic_indices:
-
+            
             indx = neg_scan_indices[sorted_neg_fpr[i]]
 
             grount_truth_slice, _ = io.load(list_of_ground_truths[indx])
@@ -404,25 +404,29 @@ def save_svg_slice_and_annotation_summary(fileloc, image_slice, ground_truth_ann
     combined_annotation = ground_truth_annotation + predicted_annotation
 
     # extract tp, fp, fn
-    tp = np.ma.masked_where(combined_annotation != 3, combined_annotation) # yellow
-    fn = np.ma.masked_where(combined_annotation != 2, combined_annotation) # green
-    fp = np.ma.masked_where(combined_annotation != 1, combined_annotation) # red
+    tp = np.ma.masked_where(combined_annotation != 3, combined_annotation) 
+    fn = np.ma.masked_where(combined_annotation != 2, combined_annotation) 
+    fp = np.ma.masked_where(combined_annotation != 1, combined_annotation) 
     
-    p = generate_custom_cmap([1, 1, 0], [1, 1, 0])
-    p2 = generate_custom_cmap([0, 1, 0], [0, 1, 0])
-    p3 =  generate_custom_cmap([1, 0, 0], [1, 0, 0])
+    p = generate_custom_cmap([1, 1, 0], [1, 1, 0]) # yellow
+    p2 = generate_custom_cmap([0, 1, 0], [0, 1, 0]) # green
+    p3 =  generate_custom_cmap([1, 0, 0], [1, 0, 0]) # red
+
+    window = vmax - vmin
+    level = vmax - (window/2)
+    level = format(level, '.2f')
 
     fig = plt.figure()
     ax = fig.add_subplot(121)
-    plt.suptitle("{}; #{}/{} Dice {:.4f}; FNR {:.4f}; FPR {:.4f}; Level: {} -- {}".format(name[:-7], dice_nr+1, total_test_size, dice_score_slice, fnr_slice, fpr_slice, vmin, vmax))
-    ax.imshow(image_slice, cmap='gray', vmin=vmin, vmax=vmax); ax.set_title("Slice")
+    plt.suptitle("{}; #{}/{} Dice {:.4f}; FNR {:.4f}; FPR {:.4f}; W {}HU L {}HU".format(name[:-7], dice_nr+1, total_test_size, dice_score_slice, fnr_slice, fpr_slice, window, level))
+    ax.imshow(image_slice, cmap='gray', vmin=vmin, vmax=vmax); ax.set_title("Slice without annotations")
     ax.axis('off')
 
     ax2 = fig.add_subplot(122)
     ax2.imshow(image_slice, cmap='gray', vmin=vmin, vmax=vmax)
-    im_tp = ax2.imshow(tp, cmap = p, alpha= 0.5, label= 'TP')
-    im_fn = ax2.imshow(fn, cmap = p2, alpha= 0.5, label= 'FN')
-    im_fp = ax2.imshow(fp, cmap = p3, alpha= 0.5, label= 'FP'); ax.set_title("Slice with both annotations")
+    im_tp = ax2.imshow(tp, cmap = p2, alpha= 0.5, label= 'TP')
+    im_fn = ax2.imshow(fn, cmap = p, alpha= 0.5, label= 'FN')
+    im_fp = ax2.imshow(fp, cmap = p3, alpha= 0.5, label= 'FP'); ax.set_title("Slice with annotations")
     ax2.axis('off')
 
     #(https://stackoverflow.com/questions/40662475/matplot-imshow-add-label-to-each-color-and-put-them-in-legend)
