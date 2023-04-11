@@ -88,9 +88,9 @@ def generate_csv(args, training_time):
                    'Train Slices (pos/neg)': [f'{positive_training_cases} / {negative_training_cases}'],
                    'Test Slices (pos/neg)': [f'{positive_test_cases} / {negative_test_cases}'],
                    'Fold': [folds],
-                   'Mean ± Std Dice (Test)': [f'{mean_testing_dice} ± {std_testing_dice}'],
-                   'Mean ± Std Dice (only pos cases)': [f'{mean_pos_testing_dice} ± {std_pos_testing_dice}'],
-                   'False Positive Rate': [f'{mean_fpr} ± {std_fpr}'],
+                   'Mean +/- Std Dice (Test)': [f'{mean_testing_dice} +/- {std_testing_dice}'],
+                   'Mean +/- Std Dice (only pos cases)': [f'{mean_pos_testing_dice} +/- {std_pos_testing_dice}'],
+                   'False Positive Rate': [f'{mean_fpr} +/- {std_fpr}'],
                    'Training time (in seconds)': [training_time],
                    'NOTE': [args.note]
                    })
