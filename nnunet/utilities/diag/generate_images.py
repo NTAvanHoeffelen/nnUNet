@@ -295,9 +295,13 @@ def save_svg_slice_and_annotation(svg_dest, fileloc, image_slice, ground_truth_a
     gt_values = np.unique(ground_truth_annotation)
     pred_values = np.unique(predicted_annotation)
 
+    window = vmax - vmin
+    level = vmax - (window/2)
+    level = format(level, '.2f')
+
     fig = plt.figure()
 
-    plt.suptitle("{}; Dice {:.4f}; Level: {} -- {}".format(name[:-7], dice_score_slice, vmin, vmax))
+    plt.suptitle("{}; Dice {:.4f}; W {}HU L {}HU".format(name[:-7], dice_score_slice, window, level))
     plt.subplot(2,3,1)
     plt.imshow(image_slice, cmap='gray', vmin=vmin, vmax=vmax); plt.title("Slice")
     plt.axis('off')
